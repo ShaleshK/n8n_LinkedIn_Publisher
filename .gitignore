@@ -1,0 +1,24 @@
+# Secure Environment Variable files
+.env
+.env.local
+
+# Google Cloud Service Account Security Credentials
+*.json
+google-credentials.json
+service_account.json
+
+# Local Python Environment Caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+crewai_env/
+.virtualenvs/
+
+# Operating System files
+.DS_Store
+Thumbs.db
