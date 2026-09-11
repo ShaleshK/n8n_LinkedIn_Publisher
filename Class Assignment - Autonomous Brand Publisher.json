@@ -1,0 +1,576 @@
+{
+  "name": "Class Assignment - Autonomous Brand Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "2b69a64e-c665-448d-9e73-072e33ecd631",
+      "name": "Schedule Trigger (24 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "brand_name",
+              "stringValue": "OpenClaw AI Solutions"
+            },
+            {
+              "name": "target_audience",
+              "stringValue": "Marketing Managers at mid-size SaaS firms"
+            },
+            {
+              "name": "tone",
+              "stringValue": "Trustworthy, data-informed, highly innovative"
+            },
+            {
+              "name": "core_context",
+              "type": "string"
+            },
+            {
+              "name": "length_limit",
+              "type": "number"
+            },
+            {
+              "name": "MIN_CONFIDENCE_THRESHOLD",
+              "type": "numberValue",
+              "numberValue": "0.99"
+            },
+            {
+              "name": "DRY_RUN_FLAG",
+              "type": "booleanValue"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "30f5293a-3153-4070-b966-b4dd1a7ae258",
+      "name": "Brand Config & Controls",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        192,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/generate/content",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"brand_name\": \"{{ $json.brand_name || '' }}\",\n  \"target_audience\": \"{{ $json.target_audience || '' }}\",\n  \"tone\": \"{{ $json.tone || '' }}\",\n  \"core_context\": \"{{ $json.core_context || '' }}\",\n  \"length_limit\": {{ $json.length_limit || 250 }}\n}\n",
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "id": "723c1804-d61b-4ee9-ba5a-c867c02f67bf",
+      "name": "Call AutoGen Microservice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "final_post_text",
+              "stringValue": "={{ $json.draft }}\n\n{{ $json.hashtags.join(' ') }}"
+            },
+            {
+              "name": "confidence_score",
+              "type": "numberValue",
+              "numberValue": "={{ $json.confidence_score * 1 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bfd68382-5d98-48a1-afee-193ddb5ce769",
+      "name": "Assemble Post & Tags",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_SLACK_WEBHOOK_URL",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"📝 *New Multi-Agent Draft Ready for Review*\\n\\n*Proposed Copy:* \\n{{ $json.final_post_text.replace(/\\n/g, '\\\\n') }}\\n\\n*Confidence Score:* {{ $json.confidence_score }}\"\n      }\n    },\n    {\n      \"type\": \"actions\",\n      \"elements\": [\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"🟢 Approve & Publish\"\n          },\n          \"style\": \"primary\",\n          \"value\": \"approve\",\n          \"action_id\": \"approve_click\"\n        },\n        {\n          \"type\": \"button\",\n          \"text\": {\n            \"type\": \"plain_text\",\n            \"text\": \"🔴 Reject Post\"\n          },\n          \"style\": \"danger\",\n          \"value\": \"reject\",\n          \"action_id\": \"reject_click\"\n        }\n      ]\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "9f8ab6e7-6133-47df-9640-237203196376",
+      "name": "Route to Slack for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1024,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "chk_action",
+              "leftValue": "={{ $json.action_value }}",
+              "rightValue": "approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8085cb4d-a1ab-4ab8-bdaf-fb9f912d4594",
+      "name": "Approval Gate Routing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        688,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1R6o8-4xs9hYnJafRSjxyuY3jN7F2efOQPfS9KfR88Vk",
+          "mode": "list",
+          "cachedResultName": "Ticket Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R6o8-4xs9hYnJafRSjxyuY3jN7F2efOQPfS9KfR88Vk/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1R6o8-4xs9hYnJafRSjxyuY3jN7F2efOQPfS9KfR88Vk/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}\n",
+            "sender": "=Slack Interactive Webhook\n\n",
+            "priority": "={{ $('Build LinkedIn Post Body').item.json.confidence_score >= 0.95 ? 'Low Triage' : 'Review Required' }}",
+            "subject": "={{ ($('Build LinkedIn Post Body').item.json.post_text || $('Build LinkedIn Post Body').item.json.final_post_text).substring(0, 50) }}...\n",
+            "status": "={{ $('Build LinkedIn Post Body').item.json.origin === 'auto_published' ? 'Published Live (Auto)' : 'Published via Slack Approval' }}",
+            "confidence_score": "=={{ $('Build LinkedIn Post Body').item.json.confidence_score }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sender",
+              "displayName": "sender",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confidence_score",
+              "displayName": "confidence_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        256
+      ],
+      "id": "827a86fd-fecc-42a9-9b47-02c90a8012f1",
+      "name": "Append row in sheet",
+      "retryOnFail": true,
+      "credentials": {
+        "googleApi": {
+          "id": "mJGLBDPOE5UDdc6s",
+          "name": "Google Service Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/posts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "linkedInOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "LinkedIn-Version",
+              "value": "202608"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.linkedin_body_json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1136,
+        256
+      ],
+      "id": "01f404ef-96a0-43d9-8c28-b1d6ff13872e",
+      "name": "HTTP Request",
+      "notesInFlow": true,
+      "credentials": {
+        "oAuth2Api": {
+          "id": "7NWKZiDxBjrtkfRV",
+          "name": "Unnamed credential"
+        },
+        "linkedInOAuth2Api": {
+          "id": "i4l31sRURRJNJdRa",
+          "name": "LinkedIn account"
+        }
+      },
+      "notes": "Replace PASTE_YOUR_REAL_ID_HERE in the JSON body below with your real LinkedIn member URN (e.g. urn:li:person:XXXXXXXXXX). You can find this via LinkedIn's /v2/userinfo endpoint after OAuth. Also confirm the OAuth2 credential has the w_member_social scope."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack-interactivity-receiver",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        256
+      ],
+      "id": "15545e6e-04a9-424e-aef8-50391dcf8f91",
+      "name": "Webhook",
+      "webhookId": "5baadb30-fe2b-44c7-8cf9-55954b97db94"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Post Status Updated Successfully!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        208,
+        256
+      ],
+      "id": "5fe7632f-7910-49f2-8d4a-25af16e5d1f0",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Grab the parsed form body from the webhook (n8n auto-parses\n// application/x-www-form-urlencoded content into $json.body)\nconst items = $input.all();\nconst body = items[0]?.json?.body || {};\nconst stringifiedPayload = body.payload;\n\nif (!stringifiedPayload) {\n    throw new Error(\"Could not find 'payload' in the Slack form submission. Check that Slack's Request URL points at this webhook's production URL.\");\n}\n\n// Parse the underlying Slack interactive JSON payload\nconst parsedPayload = JSON.parse(stringifiedPayload);\n\n// blocks[0] is the text \"Proposed Copy\" section.\n// blocks[1] is the actions block (the buttons) and has no .text field.\nconst fullText = parsedPayload.message?.blocks?.[0]?.text?.text || \"\";\n\nconst copyMarker = \"*Proposed Copy:* \\n\";\nconst confidenceMarker = \"*Confidence Score:*\";\n\nconst copyIdx = fullText.indexOf(copyMarker);\nconst confidenceIdx = fullText.indexOf(confidenceMarker);\n\n// Extract post text, stopping before the confidence line if present\nlet postText = \"\";\nif (copyIdx !== -1) {\n    const start = copyIdx + copyMarker.length;\n    const end = confidenceIdx !== -1 ? confidenceIdx : fullText.length;\n    postText = fullText.slice(start, end).trim();\n} else {\n    postText = fullText.trim();\n}\n\n// Extract confidence score from after its marker\nlet confidenceScore = null;\nif (confidenceIdx !== -1) {\n    const rawValue = fullText.slice(confidenceIdx + confidenceMarker.length).trim();\n    const parsed = parseFloat(rawValue);\n    confidenceScore = isNaN(parsed) ? null : parsed;\n}\n\nreturn {\n    body: parsedPayload,\n    post_text: postText,\n    confidence_score: confidenceScore,\n    action_value: parsedPayload.actions?.[0]?.value || \"\"\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        256
+      ],
+      "id": "fe349063-63e2-415d-893c-225a0822d5bc",
+      "name": "Parse Slack Approval Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.item.json.post_text || $input.item.json.final_post_text;\n\nif (!text) {\n  throw new Error(\"No post text found in input data (checked post_text and final_post_text).\");\n}\n\nconst origin = $input.item.json.post_text ? \"slack_approved\" : \"auto_published\";\n\nconst body = {\n  author: \"urn:li:person:YOUR_REAL_ID_HERE\",\n  commentary: text,\n  visibility: \"PUBLIC\",\n  distribution: { feedDistribution: \"MAIN_FEED\" },\n  lifecycleState: \"PUBLISHED\"\n};\n\nreturn {\n  ...$input.item.json,\n  origin,\n  linkedin_body_json: JSON.stringify(body)\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        256
+      ],
+      "id": "834bac43-3901-405c-a040-a75f8b0c63c1",
+      "name": "Build LinkedIn Post Body"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "chk_action",
+              "leftValue": "={{ $json.confidence_score }}",
+              "rightValue": "={{ $('Brand Config & Controls').item.json.MIN_CONFIDENCE_THRESHOLD }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "aa3e4cc7-7e72-4d42-983c-739398305c3a",
+              "leftValue": "= {{ $('Brand Config & Controls').item.json.DRY_RUN_FLAG }}\n\n",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "looseTypeValidation": false
+        }
+      },
+      "id": "455cc07f-ed77-4038-a871-edf20ea85656",
+      "name": "IF",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        816,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Approval Gate Routing": {
+      "main": [
+        [
+          {
+            "node": "Build LinkedIn Post Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (24 Hours)": {
+      "main": [
+        [
+          {
+            "node": "Brand Config & Controls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brand Config & Controls": {
+      "main": [
+        [
+          {
+            "node": "Call AutoGen Microservice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AutoGen Microservice": {
+      "main": [
+        [
+          {
+            "node": "Assemble Post & Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Post & Tags": {
+      "main": [
+        [
+          {
+            "node": "IF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse Slack Approval Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Slack Approval Payload": {
+      "main": [
+        [
+          {
+            "node": "Approval Gate Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LinkedIn Post Body": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF": {
+      "main": [
+        [
+          {
+            "node": "Build LinkedIn Post Body",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Route to Slack for Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "47b17f0c-be24-465b-8156-7516f0f0fd7d",
+  "meta": {
+    "instanceId": "c7109ecd1bfdc252d31a92125bcb91c8ee76a2bb626c560d4757490c39245087"
+  },
+  "nodeGroups": [],
+  "id": "VfrznPbzaZ2C7HSO",
+  "tags": []
+}

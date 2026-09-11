@@ -1,0 +1,320 @@
+{
+  "name": "Class Assignment - Autonomous Brand Publisher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "cron_trigger_cadence",
+      "name": "Schedule Trigger (24 Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "brand_name",
+              "stringValue": "OpenClaw AI Solutions"
+            },
+            {
+              "name": "target_audience",
+              "stringValue": "Marketing Managers at mid-size SaaS firms"
+            },
+            {
+              "name": "tone",
+              "stringValue": "Trustworthy, data-informed, highly innovative"
+            },
+            {
+              "name": "core_context",
+              "stringValue": "Scaling autonomous multi-agent content microservices built inside enterprise local host networks.",
+              "type": "string"
+            },
+            {
+              "name": "length_limit",
+              "numberValue": 250,
+              "type": "number"
+            },
+            {
+              "name": "MIN_CONFIDENCE_THRESHOLD",
+              "numberValue": 0.90,
+              "type": "number"
+            },
+            {
+              "name": "DRY_RUN_FLAG",
+              "booleanValue": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "brand_configuration_data",
+      "name": "Brand Config & Controls",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docker.internal",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"brand_name\": \"{{ $json.brand_name }}\",\n  \"target_audience\": \"{{ $json.target_audience }}\",\n  \"tone\": \"{{ $json.tone }}\",\n  \"core_context\": \"{{ $json.core_context }}\",\n  \"length_limit\": {{ $json.length_limit }}\n}",
+        "options": {}
+      },
+      "id": "http_request_microservice",
+      "name": "Call AutoGen Microservice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "fields": {
+          "values": [
+            {
+              "name": "final_post_text",
+              "stringValue": "={{ $json.draft }}\n\n{{ $json.hashtags.join(' ') }}"
+            },
+            {
+              "name": "confidence_score",
+              "numberValue": "={{ $json.confidence_score }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set_assemble_final_text",
+      "name": "Assemble Post & Tags",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        450,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "chk_confidence",
+              "leftValue": "={{ $json.confidence_score }}",
+              "rightValue": "={{ $('Brand Config & Controls').item.json.MIN_CONFIDENCE_THRESHOLD }}",
+              "operator": {
+                "type": "number",
+                "operation": "greaterThan"
+              }
+            },
+            {
+              "id": "chk_dryrun",
+              "leftValue": "={{ $('Brand Config & Controls').item.json.DRY_RUN_FLAG }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "switch_approval_gate",
+      "name": "Approval Gate Routing",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"⚠️ [HITL COMPLIANCE REVIEW REQUESTED]\\n\\n*Draft Post:*\\n{{ $json.final_post_text }}\\n\\n*Confidence Score:* {{ $json.confidence_score }}\\n\\nTo push this campaign live to production, navigate to your dashboard and verify the execution tree manually.\"\n}",
+        "options": {}
+      },
+      "id": "slack_notification_review",
+      "name": "Route to Slack for Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        950,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "sendBinaryData": false,
+        "resource": "ugcPost",
+        "shareCommentary": "={{ $json.final_post_text }}"
+      },
+      "id": "linkedin_production_publish",
+      "name": "Publish directly to LinkedIn",
+      "type": "n8n-nodes-base.linkedIn",
+      "typeVersion": 1,
+      "position": [
+        950,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SPREADSHEET_ID_HERE",
+          "mode": "list",
+          "cachedResultName": "Ticket Log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid://sheet/Page1",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "{{ $now.toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            "sender": "AutoGen Microservice API",
+            "subject": "={{ $json.final_post_text.substring(0, 50) }}...",
+            "priority": "={{ $json.confidence_score >= 0.95 ? 'Low Triage' : 'Review Required' }}",
+            "status": "={{ $('Approval Gate Routing').item.json.confidence_score >= $('Brand Config & Controls').item.json.MIN_CONFIDENCE_THRESHOLD && !$('Brand Config & Controls').item.json.DRY_RUN_FLAG ? 'Published Live' : 'Slack Buffered' }}"
+          },
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "append_run_details_log",
+      "name": "Append Run Details to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1250,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "cron_trigger_cadence": {
+      "main": [
+        [
+          {
+            "node": "brand_configuration_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "brand_configuration_data": {
+      "main": [
+        [
+          {
+            "node": "http_request_microservice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_request_microservice": {
+      "main": [
+        [
+          {
+            "node": "set_assemble_final_text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set_assemble_final_text": {
+      "main": [
+        [
+          {
+            "node": "switch_approval_gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "switch_approval_gate": {
+      "main": [
+        [
+          {
+            "node": "linkedin_production_publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "slack_notification_review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "linkedin_production_publish": {
+      "main": [
+        [
+          {
+            "node": "append_run_details_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "slack_notification_review": {
+      "main": [
+        [
+          {
+            "node": "append_run_details_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

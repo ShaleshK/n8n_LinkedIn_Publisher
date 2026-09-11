@@ -3,7 +3,6 @@
 .env.local
 
 # Google Cloud Service Account Security Credentials
-*.json
 google-credentials.json
 service_account.json
 
